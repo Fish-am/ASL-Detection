@@ -11,7 +11,7 @@ class ASLPredictor:
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model = YOLOv10ASL(num_classes=num_classes)
         
-        # Load model weights
+        
         checkpoint = torch.load(model_path, map_location=self.device)
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.model.to(self.device)
@@ -34,16 +34,16 @@ class ASLPredictor:
             if not ret:
                 break
                 
-            # Process frame
+            
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             transformed = self.transform(image=frame_rgb)
             image = transformed['image'].unsqueeze(0).to(self.device)
             
-            # Get predictions
+           
             with torch.no_grad():
                 output = self.model(image)
             
-            # Process predictions
+            
             pred = output[0].cpu().numpy()
             confident_preds = pred[pred[:, 4] > confidence_threshold]
             predictions.append(confident_preds)
@@ -52,10 +52,10 @@ class ASLPredictor:
         return predictions
 
 def main():
-    # Example usage
+    
     model_path = 'checkpoints/best_model.pt'
     video_path = 'test_videos/example.mp4'
-    num_classes = 2000  # Update based on your dataset
+    num_classes = 2000  
     
     predictor = ASLPredictor(model_path, num_classes)
     predictions = predictor.predict_video(video_path)

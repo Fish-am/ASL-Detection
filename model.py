@@ -7,7 +7,7 @@ class YOLOv10ASL(nn.Module):
         self.grid_size = grid_size
         self.num_classes = num_classes
         
-        # Backbone
+        
         self.backbone = nn.Sequential(
             self._conv_block(3, 32, 3),
             nn.MaxPool2d(2),
@@ -34,12 +34,12 @@ class YOLOv10ASL(nn.Module):
             self._conv_block(512, 1024, 3)
         )
         
-        # Detection head
+        
         self.head = nn.Sequential(
             nn.Conv2d(1024, 512, 1),
             nn.BatchNorm2d(512),
             nn.LeakyReLU(0.1),
-            nn.Conv2d(512, (num_classes + 5) * 1, 1)  # 5 for x, y, w, h, confidence
+            nn.Conv2d(512, (num_classes + 5) * 1, 1)  
         )
     
     def _conv_block(self, in_channels, out_channels, kernel_size):
@@ -55,6 +55,6 @@ class YOLOv10ASL(nn.Module):
         x = self.backbone(x)
         x = self.head(x)
         
-        # Reshape to (batch_size, grid_size, grid_size, num_classes + 5)
+       
         x = x.permute(0, 2, 3, 1).contiguous()
         return x 

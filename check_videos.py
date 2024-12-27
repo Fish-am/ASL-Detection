@@ -5,18 +5,18 @@ def check_videos():
     json_path = Path('data/WLASL_v0.3.json')
     video_dir = Path('data/videos')
     
-    # Load JSON
+    
     with open(json_path, 'r') as f:
         data = json.load(f)
     
-    # Get all video IDs from JSON
+    
     video_ids = set()
     for entry in data:
         if entry['instances']:
             for instance in entry['instances']:
                 video_ids.add(f"{instance['video_id']}.mp4")
     
-    # Check actual videos
+   
     actual_videos = set(f.name for f in video_dir.glob('*.mp4'))
     
     print(f"Total videos in JSON: {len(video_ids)}")
