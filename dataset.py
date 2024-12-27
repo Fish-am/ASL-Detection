@@ -15,29 +15,31 @@ class WLASLDataset(Dataset):
         self.img_size = img_size
         self.transform = transform
         
+        # Get available videos first
+        available_videos = set(f.stem for f in self.video_dir.glob('*.mp4'))
+        
         # Load JSON data
         with open(json_path, 'r') as f:
             self.data = json.load(f)
             
-        # Create label mapping and valid instances
-        self.label_map = {}
+        # Create label mapping starting from 0
+        unique_classes = sorted(set(item['gloss'] for item in self.data 
+                                 if item['instances'] is not None))
+        self.label_map = {gloss: idx for idx, gloss in enumerate(unique_classes)}
+        
+        # Create instances list
         self.instances = []
-        
-        # Track available videos
-        available_videos = set(f.stem for f in self.video_dir.glob('*.mp4'))
-        
-        for idx, item in enumerate(self.data):
+        for item in self.data:
             if item['instances'] is not None:
                 valid_instances = [
                     inst for inst in item['instances']
                     if inst['video_id'] in available_videos
                 ]
-                if valid_instances:  # Only add to label map if there are valid instances
-                    self.label_map[item['gloss']] = idx
+                if valid_instances:
                     for instance in valid_instances:
                         self.instances.append({
                             'video_id': instance['video_id'],
-                            'label': idx,
+                            'label': self.label_map[item['gloss']],  # Use mapped index
                             'gloss': item['gloss']
                         })
         
@@ -102,15 +104,22 @@ class WLASLDataset(Dataset):
         frame = cv2.resize(frame, (self.img_size, self.img_size))
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         
-        if self.transform:
-            transformed = self.transform(image=frame)  # Pass as named argument
-            frame = transformed['image']
-        else:
-            # Convert to tensor if no transform
-            frame = torch.from_numpy(frame).float().permute(2, 0, 1) / 255.0
-        
         # Create YOLO format labels
         label = torch.zeros((1, 6))  # class, x, y, w, h, confidence
-        label[0] = torch.tensor([instance['label'], x_center, y_center, width, height, 1.0])
+        label[0] = torch.tensor([
+            instance['label'],  # class
+            x_center,          # x
+            y_center,          # y
+            width,            # w
+            height,           # h
+            1.0               # confidence
+        ])
+        
+        # Ensure label is on the same device as the image
+        if self.transform:
+            transformed = self.transform(image=frame)
+            frame = transformed['image']
+        else:
+            frame = torch.from_numpy(frame).float().permute(2, 0, 1) / 255.0
         
         return frame, label 

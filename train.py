@@ -12,17 +12,22 @@ from config import Config
 from tqdm import tqdm
 
 def collate_fn(batch):
-    images, labels = zip(*batch)
+    images = []
+    labels = []
+    for img, lbl in batch:
+        images.append(img)
+        labels.append(lbl)
     images = torch.stack(images)
-    labels = torch.cat(labels)
+    labels = torch.cat(labels, dim=0).reshape(len(batch), 1, -1)  # Reshape to (batch_size, 1, 6)
     return images, labels
 
 def train():
     # Hyperparameters
-    BATCH_SIZE = 8
+    BATCH_SIZE = 2
     EPOCHS = 100
-    LEARNING_RATE = 0.001
-    IMG_SIZE = 640
+    LEARNING_RATE = 0.0001
+    IMG_SIZE = 416      # Multiple of 32 for YOLO
+    GRID_SIZE = 13      # For 416x416 input
     
     # Use paths from Config
     json_path = Config.JSON_PATH
@@ -46,7 +51,7 @@ def train():
         train_dataset, 
         batch_size=BATCH_SIZE, 
         shuffle=True, 
-        num_workers=4,
+        num_workers=2,
         collate_fn=collate_fn,
         drop_last=True
     )
@@ -55,13 +60,13 @@ def train():
         val_dataset, 
         batch_size=BATCH_SIZE, 
         shuffle=False, 
-        num_workers=4,
+        num_workers=2,
         collate_fn=collate_fn,
         drop_last=True
     )
     
     # Initialize model, optimizer, scheduler, and loss
-    model = YOLOv10ASL(num_classes=len(full_dataset.label_map))
+    model = YOLOv10ASL(num_classes=len(full_dataset.label_map), grid_size=GRID_SIZE)
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=5, factor=0.5)
     criterion = YOLOLoss()
@@ -70,6 +75,12 @@ def train():
     model = model.to(device)
     
     best_val_loss = float('inf')
+    
+    # Add gradient clipping
+    max_norm = 1.0
+    
+    # Enable anomaly detection during development
+    torch.autograd.set_detect_anomaly(True)
     
     for epoch in range(EPOCHS):
         # Training phase
@@ -81,15 +92,33 @@ def train():
             images = images.to(device)
             targets = targets.to(device)
             
+            # Print shapes for debugging
+            if batch_idx == 0:
+                print(f"\nDebug shapes:")
+                print(f"Images shape: {images.shape}")
+                print(f"Targets shape: {targets.shape}")
+            
             optimizer.zero_grad()
             predictions = model(images)
+            
+            if batch_idx == 0:
+                print(f"Predictions shape: {predictions.shape}\n")
+            
             loss = criterion(predictions, targets)
             
             loss.backward()
+            
+            # Clip gradients
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
+            
             optimizer.step()
             
             train_loss += loss.item()
             progress_bar.set_postfix({'loss': loss.item()})
+            
+            # Memory cleanup
+            del images, targets, predictions
+            torch.cuda.empty_cache() if torch.cuda.is_available() else None
         
         avg_train_loss = train_loss / len(train_loader)
         
